@@ -92,7 +92,7 @@ async function exampleAdd() {
     note: "Courses",
     date: new Date(),
     recurringSeriesId: null,
-  } as Transaction)
+  })
   return newId
 }
 

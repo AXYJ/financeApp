@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, JSX, MouseEvent as ReactMouseEvent } from "react";
 
-import { Category, Transaction, Expense, Income, ExpenseCategory, IncomeCategory } from "../type/type"
+import { Category, Transaction, ExpenseCategory, IncomeCategory } from "../type/type"
+import { db } from "../lib/db"
+import { useLiveQuery } from "dexie-react-hooks"
 
 type CategoryBreakdown = {
   category: Category
@@ -15,7 +17,7 @@ function getCategoryBreakdown(transactions: Transaction[], categories: Category[
   const monthTransactions = transactions.filter(
     (t) => t.date.getMonth() === monthDate.getMonth() && t.date.getFullYear() === monthDate.getFullYear()
   )
-  const total = monthTransactions.reduce((sum, t) => sum + t.amount, 0)
+  const total: number = monthTransactions.reduce((sum, t) => sum + t.amount, 0)
 
   return categories
     .map((category) => {
@@ -33,7 +35,7 @@ function getMonthTransactions(transactions: Transaction[], monthDate: Date): Tra
     .sort((a, b) => b.date.getTime() - a.date.getTime())
 }
 
-function TransactionList({ transactions, emptyMessage }: { transactions: Transaction[]; emptyMessage: string }) {
+function TransactionList({ transactions, emptyMessage }: { transactions: Transaction[]; emptyMessage: string }): JSX.Element {
   if (transactions.length === 0) {
     return <p className="text-center text-zinc-400">{emptyMessage}</p>
   }
@@ -41,9 +43,9 @@ function TransactionList({ transactions, emptyMessage }: { transactions: Transac
   return (
     <div className="flex flex-col gap-2 w-full">
       {transactions.map((t) => (
-        <div key={t.id} className="flex items-center gap-2 px-4">
-          <div className="flex-1">{t.note}</div>
-          <div className="text-sm text-zinc-500">{t.date.toLocaleDateString('fr-FR')}</div>
+        <div key={t.id} className="grid grid-cols-4 items-center gap-2 px-4">
+          <div className="text-sm text-zinc-500">{t.date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'numeric' })}</div>
+          <div className="flex-1 col-span-2">{t.note}</div>
           <div>{t.amount.toFixed(2)} €</div>
         </div>
       ))}
@@ -55,11 +57,11 @@ function PieChart({ breakdown, center, onSelect }: {
   breakdown: CategoryBreakdown[]
   center: CategoryBreakdown | null
   onSelect: (category: Category) => void
-}) {
+}): JSX.Element {
   const segments = breakdown.filter((b) => b.percent > 0)
 
   if (segments.length === 0) {
-    return <div className="w-40 h-40 rounded-full bg-zinc-200 dark:bg-zinc-800 mx-auto" />
+    return <div className="w-full max-w-64 rounded-full aspect-square bg-zinc-200 dark:bg-zinc-800 mx-auto" />
   }
 
   let cumulative = 0
@@ -71,7 +73,7 @@ function PieChart({ breakdown, center, onSelect }: {
   const stops = ranges.map((r) => `${r.category.color} ${r.start}% ${r.end}%`).join(', ')
 
   // Détermine la tranche cliquée à partir de l'angle du clic par rapport au centre du cercle
-  function handleClick(event: ReactMouseEvent<HTMLDivElement>) {
+  function handleClick(event: ReactMouseEvent<HTMLDivElement>): void {
     const rect = event.currentTarget.getBoundingClientRect()
     const dx = event.clientX - (rect.left + rect.width / 2)
     const dy = event.clientY - (rect.top + rect.height / 2)
@@ -113,10 +115,14 @@ export default function Home() {
 
   const [currentSlide, setCurrentSlide] = useState<number>(1)
   const [addingTransaction, setAddingTransaction] = useState<boolean>(false)
-  const [transactionId, setTransactionId] = useState<number>(0)
   const [expense, setExpense] = useState<string>("Courses")
   const [income, setIncome] = useState<string>("Salaire")
   const popupRef = useRef<HTMLFormElement>(null)
+
+  // Ajout de transaction — pas de champ `id` : Dexie le génère lui-même (++id du schéma)
+  async function addTransaction(transaction: Omit<Transaction, "id">): Promise<number> {
+    return await db.transactions.add(transaction)
+  }
 
   // Gestion du formulaire
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -128,31 +134,16 @@ export default function Home() {
     const formData = new FormData(form)
 
     // Récupérer les données du formulaire
-    const id = transactionId
-    setTransactionId(transactionId + 1)
     const type: 'expense' | 'income' = currentSlide === 1 ? "expense" : "income"
     const amount: number = Number(formData.get("amount"))
     const categoryId: number = Number(formData.get("category"))
     const note: string = formData.get("name") as string
     const date: Date = new Date()
 
-    // ... traiter les données
-    const transaction: Transaction = {
-      id,
-      type,
-      amount,
-      categoryId,
-      note,
-      date,
-      recurringSeriesId: null
-    }
+    // Ajout de la transaction dans la base de données IndexedDB
+    addTransaction({ type, amount, categoryId, note, date, recurringSeriesId: null })
 
-    if (type === "expense") {
-      Expense.push(transaction)
-    } else {
-      Income.push(transaction)
-    }
-
+    // Fermeture de la pop-up
     setAddingTransaction(false)
   }
 
@@ -171,24 +162,35 @@ export default function Home() {
   }, [addingTransaction])
 
 
+  // useLiveQuery relit automatiquement la base et re-render dès qu'une transaction
+  // est ajoutée/modifiée/supprimée — plus besoin de forcer un re-render à la main.
+  // Reste `undefined` le temps de la première lecture (asynchrone) : on retombe sur [].
+  const allExpenses = useLiveQuery(() => db.transactions.where("type").equals("expense").toArray()) ?? []
+  const allIncomes = useLiveQuery(() => db.transactions.where("type").equals("income").toArray()) ?? []
+
   const now = new Date()
   const monthName = now.toLocaleDateString('fr-FR', { month: 'long' })
-  const expenseBreakdown = getCategoryBreakdown(Expense, ExpenseCategory, now)
-  const incomeBreakdown = getCategoryBreakdown(Income, IncomeCategory, now)
+  const expenseBreakdown = getCategoryBreakdown(allExpenses, ExpenseCategory, now)
+  const incomeBreakdown = getCategoryBreakdown(allIncomes, IncomeCategory, now)
 
   const selectedExpenseCategory = ExpenseCategory.find((c) => c.name === expense) ?? ExpenseCategory[0]
   const selectedIncomeCategory = IncomeCategory.find((c) => c.name === income) ?? IncomeCategory[0]
   const selectedExpense = expenseBreakdown.find((b) => b.category.id === selectedExpenseCategory.id) ?? null
   const selectedIncome = incomeBreakdown.find((b) => b.category.id === selectedIncomeCategory.id) ?? null
 
-  const expenseTransactions = getMonthTransactions(Expense, now)
+  const expenseTransactions = getMonthTransactions(allExpenses, now)
     .filter((t) => t.categoryId === selectedExpenseCategory.id)
-  const incomeTransactions = getMonthTransactions(Income, now)
+  const incomeTransactions = getMonthTransactions(allIncomes, now)
     .filter((t) => t.categoryId === selectedIncomeCategory.id)
 
   return (
     <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex flex-1 w-full max-w-3xl flex-col items-center py-12 px-4 bg-white dark:bg-black sm:items-start gap-8 overflow-hidden">
+
+        {/* Menu bottom */}
+        <div>
+          
+        </div>
 
         {/* Contenu principal */}
         <div className="flex w-full transition-transform duration-500 ease-in-out"
