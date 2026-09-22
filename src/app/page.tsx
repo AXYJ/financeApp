@@ -1,0 +1,269 @@
+'use client'
+
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent, JSX, MouseEvent as ReactMouseEvent } from "react";
+
+import { Category, Transaction, Expense, Income, ExpenseCategory, IncomeCategory } from "../type/type"
+
+type CategoryBreakdown = {
+  category: Category
+  amount: number
+  percent: number
+}
+
+function getCategoryBreakdown(transactions: Transaction[], categories: Category[], monthDate: Date): CategoryBreakdown[] {
+  const monthTransactions = transactions.filter(
+    (t) => t.date.getMonth() === monthDate.getMonth() && t.date.getFullYear() === monthDate.getFullYear()
+  )
+  const total = monthTransactions.reduce((sum, t) => sum + t.amount, 0)
+
+  return categories
+    .map((category) => {
+      const amount = monthTransactions
+        .filter((t) => t.categoryId === category.id)
+        .reduce((sum, t) => sum + t.amount, 0)
+      const percent = total === 0 ? 0 : (amount / total) * 100
+      return { category, amount, percent }
+    })
+}
+
+function getMonthTransactions(transactions: Transaction[], monthDate: Date): Transaction[] {
+  return transactions
+    .filter((t) => t.date.getMonth() === monthDate.getMonth() && t.date.getFullYear() === monthDate.getFullYear())
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+}
+
+function TransactionList({ transactions, emptyMessage }: { transactions: Transaction[]; emptyMessage: string }) {
+  if (transactions.length === 0) {
+    return <p className="text-center text-zinc-400">{emptyMessage}</p>
+  }
+
+  return (
+    <div className="flex flex-col gap-2 w-full">
+      {transactions.map((t) => (
+        <div key={t.id} className="flex items-center gap-2 px-4">
+          <div className="flex-1">{t.note}</div>
+          <div className="text-sm text-zinc-500">{t.date.toLocaleDateString('fr-FR')}</div>
+          <div>{t.amount.toFixed(2)} €</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PieChart({ breakdown, center, onSelect }: {
+  breakdown: CategoryBreakdown[]
+  center: CategoryBreakdown | null
+  onSelect: (category: Category) => void
+}) {
+  const segments = breakdown.filter((b) => b.percent > 0)
+
+  if (segments.length === 0) {
+    return <div className="w-40 h-40 rounded-full bg-zinc-200 dark:bg-zinc-800 mx-auto" />
+  }
+
+  let cumulative = 0
+  const ranges = segments.map((b) => {
+    const start = cumulative
+    cumulative += b.percent
+    return { category: b.category, start, end: cumulative }
+  })
+  const stops = ranges.map((r) => `${r.category.color} ${r.start}% ${r.end}%`).join(', ')
+
+  // Détermine la tranche cliquée à partir de l'angle du clic par rapport au centre du cercle
+  function handleClick(event: ReactMouseEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const dx = event.clientX - (rect.left + rect.width / 2)
+    const dy = event.clientY - (rect.top + rect.height / 2)
+
+    const outerRadius = rect.width / 2
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    if (distance < outerRadius * 0.8) return // clic dans le trou central, on ignore
+
+    // 0deg = haut du cercle, sens horaire (comme conic-gradient par défaut)
+    const angleDeg = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360
+    const percent = (angleDeg / 360) * 100
+
+    const hit = ranges.find((r) => percent >= r.start && percent < r.end)
+    if (hit) onSelect(hit.category)
+  }
+
+  return (
+    <div
+      onClick={handleClick}
+      className="relative w-full max-w-64 aspect-square rounded-full mx-auto cursor-pointer"
+      style={{ background: `conic-gradient(${stops})` }}
+    >
+      <div className="absolute inset-8 rounded-full bg-white dark:bg-black flex flex-col items-center justify-center gap-1 text-center px-2 pointer-events-none">
+        {center && (
+          <>
+            <p className="flex items-center gap-1 text-sm">
+              <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: center.category.color }} />
+              {center.category.name} ({center.percent.toFixed(0)}%)
+            </p>
+            <p className="font-semibold">{center.amount.toFixed(2)} €</p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function Home() {
+
+  const [currentSlide, setCurrentSlide] = useState<number>(1)
+  const [addingTransaction, setAddingTransaction] = useState<boolean>(false)
+  const [transactionId, setTransactionId] = useState<number>(0)
+  const [expense, setExpense] = useState<string>("Courses")
+  const [income, setIncome] = useState<string>("Salaire")
+  const popupRef = useRef<HTMLFormElement>(null)
+
+  // Gestion du formulaire
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const form = event.currentTarget
+    if (!form.checkValidity()) return
+
+    const formData = new FormData(form)
+
+    // Récupérer les données du formulaire
+    const id = transactionId
+    setTransactionId(transactionId + 1)
+    const type: 'expense' | 'income' = currentSlide === 1 ? "expense" : "income"
+    const amount: number = Number(formData.get("amount"))
+    const categoryId: number = Number(formData.get("category"))
+    const note: string = formData.get("name") as string
+    const date: Date = new Date()
+
+    // ... traiter les données
+    const transaction: Transaction = {
+      id,
+      type,
+      amount,
+      categoryId,
+      note,
+      date,
+      recurringSeriesId: null
+    }
+
+    if (type === "expense") {
+      Expense.push(transaction)
+    } else {
+      Income.push(transaction)
+    }
+
+    setAddingTransaction(false)
+  }
+
+  // Fermer la pop-up en cliquant à l'extérieur
+  useEffect(() => {
+    if (!addingTransaction) return
+
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
+        setAddingTransaction(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [addingTransaction])
+
+
+  const now = new Date()
+  const monthName = now.toLocaleDateString('fr-FR', { month: 'long' })
+  const expenseBreakdown = getCategoryBreakdown(Expense, ExpenseCategory, now)
+  const incomeBreakdown = getCategoryBreakdown(Income, IncomeCategory, now)
+
+  const selectedExpenseCategory = ExpenseCategory.find((c) => c.name === expense) ?? ExpenseCategory[0]
+  const selectedIncomeCategory = IncomeCategory.find((c) => c.name === income) ?? IncomeCategory[0]
+  const selectedExpense = expenseBreakdown.find((b) => b.category.id === selectedExpenseCategory.id) ?? null
+  const selectedIncome = incomeBreakdown.find((b) => b.category.id === selectedIncomeCategory.id) ?? null
+
+  const expenseTransactions = getMonthTransactions(Expense, now)
+    .filter((t) => t.categoryId === selectedExpenseCategory.id)
+  const incomeTransactions = getMonthTransactions(Income, now)
+    .filter((t) => t.categoryId === selectedIncomeCategory.id)
+
+  return (
+    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
+      <main className="flex flex-1 w-full max-w-3xl flex-col items-center py-12 px-4 bg-white dark:bg-black sm:items-start gap-8 overflow-hidden">
+
+        {/* Contenu principal */}
+        <div className="flex w-full transition-transform duration-500 ease-in-out"
+          style={{
+            transform: `translateX(-${(currentSlide - 1) * 100}%)`,
+          }}>
+          <section className="relative flex w-full shrink-0 flex-col items-center gap-4">
+            <h1 className="text-center">Dépenses de {monthName}</h1>
+            <div className="w-full">
+              <PieChart breakdown={expenseBreakdown} center={selectedExpense} onSelect={(category) => setExpense(category.name)} />
+            </div>
+            <TransactionList transactions={expenseTransactions} emptyMessage="Aucune dépense ce mois-ci" />
+          </section>
+          <section className="relative flex w-full shrink-0 flex-col items-center gap-4">
+            <h1 className="text-center">Revenus de {monthName}</h1>
+            <div className="w-full">
+              <PieChart breakdown={incomeBreakdown} center={selectedIncome} onSelect={(category) => setIncome(category.name)} />
+            </div>
+            <TransactionList transactions={incomeTransactions} emptyMessage="Aucun revenu ce mois-ci" />
+          </section>
+        </div>
+
+        {/* Boutons de changement de carousel */}
+        <div className="flex gap-2">
+          <button className={`w-4 h-4 rounded-full ${currentSlide === 1 ? "bg-amber-500" : "bg-white"}`} onClick={() => setCurrentSlide(1)}></button>
+          <button className={`w-4 h-4 rounded-full ${currentSlide === 2 ? "bg-amber-500" : "bg-white"}`} onClick={() => setCurrentSlide(2)}></button>
+        </div>
+
+        {/* Bouton d'ajout de transaction */}
+        <div className="w-8/10 fixed bottom-1/10">
+          <button className="bg-white rounded-full w-full py-2 text-black"
+            onClick={() => setAddingTransaction(true)}>Ajouter {currentSlide === 1 ? "une dépense" : "un revenu"}
+          </button>
+        </div>
+
+        {/* Pop-up d'ajout de transaction */}
+        {addingTransaction &&
+          <div className="fixed top-0 left-0 w-screen h-screen z-10 bg-black/50">
+            <form
+              ref={popupRef}
+              className="gap-4 flex flex-col absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-4 py-4 w-9/10 text-black rounded-2xl"
+              onSubmit={handleSubmit}
+              noValidate>
+              <h2 className="text-center mb-2">Ajout {currentSlide === 1 ? "d'une dépense" : "d'un revenu"}</h2>
+              <div className="flex flex-col gap-2">
+                <label htmlFor="name">Nom</label>
+                <input type="text" name="name" id="name" className="px-2 border border-transparent rounded invalid:border-red-500" required />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label htmlFor="category">Catégorie</label>
+                <select name="category" id="category" className="border border-transparent rounded invalid:border-red-500">
+                  {currentSlide === 1
+                    ? ExpenseCategory.map((category: Category): JSX.Element => (
+                      <option key={category.id} value={category.id}>{category.name}</option>
+                    ))
+                    : IncomeCategory.map((category: Category): JSX.Element => (
+                      <option key={category.id} value={category.id}>{category.name}</option>
+                    ))
+                  }
+                </select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label htmlFor="amount">Montant</label>
+                <input type="number" name="amount" id="amount" className="px-2 border border-transparent rounded invalid:border-red-500" required />
+              </div>
+              <div className="flex gap-2">
+                <input type="checkbox" name="recurring" />
+                <label htmlFor="recurring">Répéter tous les mois</label>
+              </div>
+              <button className="bg-black text-white rounded-full mt-2 py-2" type="submit">Ajouter la transaction</button>
+            </form>
+          </div>
+        }
+
+      </main>
+    </div>
+  );
+}
