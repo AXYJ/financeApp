@@ -1,10 +1,12 @@
 # App de gestion de finances perso — Design
 
 ## Contexte
+
 - Usage : **solo**, sur **mobile uniquement**, pas de synchronisation multi-appareils.
 - Devise : **EUR** uniquement.
 
 ## Stack technique
+
 - **Next.js + TypeScript**
 - **PWA** (manifest.json + service worker) plutôt qu'app native :
   - Pas de compte développeur, pas de review de store, mises à jour instantanées.
@@ -13,6 +15,7 @@
 - Pas de backend : toute la logique tourne côté client.
 
 ## Stockage des données
+
 - **IndexedDB** via **Dexie.js** (wrapper simple, gère les objets structurés, pas de limite pratique).
 - Pas effacé par un "vider le cache" classique — seulement par une suppression explicite des données du site.
 - **Export / Import JSON** : bouton pour télécharger toute la base en `.json`, et un import pour la restaurer (filet de sécurité en cas de changement de tel ou suppression accidentelle).
@@ -20,19 +23,24 @@
 ## Modèle de données
 
 ### `ExpenseCategory`
+
 ```ts
 { id: string, name: string, color: string, isCustom: boolean }
 ```
+
 Liste prédéfinie (Alimentation, Transport, Logement, Loisirs, Santé, Autres...) + ajout de catégories perso.
 
 ### `IncomeCategory`
+
 ```ts
 { id: string, name: string, color: string, isCustom: boolean }
 ```
+
 Liste séparée de celle des dépenses (Salaire, Freelance, Cadeau, Remboursement...) + ajout perso.
 Deux listes distinctes car les catégories de dépenses n'ont pas de sens pour des revenus (et inversement).
 
 ### `RecurringSeries`
+
 ```ts
 {
   id: string,
@@ -45,10 +53,12 @@ Deux listes distinctes car les catégories de dépenses n'ont pas de sens pour d
   startDate: string
 }
 ```
+
 - Modifier le montant → n'affecte que les prochaines générations (l'historique déjà généré reste figé).
 - "Arrêter" → passe `active` à `false`, ne supprime pas les occurrences déjà générées.
 
 ### `Transaction`
+
 ```ts
 {
   id: string,
@@ -60,6 +70,7 @@ Deux listes distinctes car les catégories de dépenses n'ont pas de sens pour d
   recurringSeriesId: string | null
 }
 ```
+
 - À l'ouverture de l'app, si le mois courant n'a pas encore d'occurrence générée pour une `RecurringSeries` active dont `startDate` est passée, une nouvelle `Transaction` est créée automatiquement.
 
 ## Fonctionnalités
@@ -76,6 +87,7 @@ Deux listes distinctes car les catégories de dépenses n'ont pas de sens pour d
 8. **Export / Import JSON** : sauvegarde et restauration manuelle des données.
 
 ## Écrans (proposition)
+
 - **Accueil** : résumé du mois en cours (carrousel) + bouton flottant "Ajouter" (dépense/revenu).
 - **Historique** : liste des mois précédents + graphique comparatif 6 mois.
 - **Catégories** : gestion des catégories dépenses/revenus.
