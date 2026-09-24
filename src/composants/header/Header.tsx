@@ -31,7 +31,7 @@ export default function Header() {
         </svg>
       </Link>
       <Link
-        className={`${pathname === "/Historique" ? "active" : ""} rounded-full p-2`}
+        className={`${pathname === "/History" ? "active" : ""} rounded-full p-2`}
         href="/History"
       >
         <svg
