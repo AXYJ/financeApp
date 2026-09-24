@@ -38,7 +38,7 @@
 // version 1 installée dans leur navigateur.
 
 import Dexie, { type EntityTable } from "dexie";
-import type { Category, Transaction } from "../type/type";
+import type { Category, RecurringSeries, Transaction } from "../type/type";
 import { ExpenseCategory, IncomeCategory } from "../type/type";
 import { useLiveQuery } from "dexie-react-hooks";
 
@@ -56,6 +56,7 @@ class FinanceDB extends Dexie {
   // (Dexie l'assigne lui-même via `this.version(...).stores(...)` plus bas).
   categories!: EntityTable<Category, "id">;
   transactions!: EntityTable<Transaction, "id">;
+  recurringSeries!: EntityTable<RecurringSeries, "id">;
 
   constructor() {
     // Le nom passé à super() est le nom de la base dans le navigateur —
@@ -72,6 +73,19 @@ class FinanceDB extends Dexie {
       // en JS après une lecture, comme actuellement avec `.filter()`/`.sort()`).
       categories: "++id, name, type",
       transactions: "++id, type, categoryId, date",
+    });
+
+    // Vraie évolution de schéma : on ajoute une table sans toucher à la
+    // version 1 (qui reste inchangée pour ceux qui l'ont déjà). Seule la
+    // table NOUVELLE ou MODIFIÉE a besoin d'être listée ici — `categories`
+    // et `transactions` gardent automatiquement leur schéma de la v1.
+    //
+    // `active` n'est PAS indexé : IndexedDB n'accepte pas les booléens comme
+    // clé d'index (seulement string/number/Date/Array). Avec le peu de séries
+    // récurrentes que cette app gérera, lire toutes les lignes et filtrer en
+    // JS (`.toArray().filter(s => s.active)`) est largement suffisant.
+    this.version(2).stores({
+      recurringSeries: "++id",
     });
   }
 }
@@ -103,6 +117,94 @@ export function useCategories(type: "expense" | "income"): Category[] {
   return (
     useLiveQuery(() => db.categories.where("type").equals(type).toArray()) ?? []
   );
+}
+
+// ----------------------------------------------------------------------------
+// Transactions récurrentes
+// ----------------------------------------------------------------------------
+// Une RecurringSeries décrit une transaction qui doit se répéter chaque mois
+// ("500€ de loyer tous les 5"). Elle ne s'affiche jamais directement dans
+// l'historique : c'est generateDueTransactions() qui, chaque mois, crée une
+// vraie Transaction à partir d'elle (reliée via `recurringSeriesId`) — l'app
+// travaille toujours avec de vraies transactions, jamais avec la série.
+
+export async function addRecurringSeries(
+  series: Omit<RecurringSeries, "id">,
+): Promise<number> {
+  return await db.recurringSeries.add(series);
+}
+
+// "Arrêter" une série : passe active à false. Ne supprime ni la série ni les
+// transactions déjà générées — l'historique passé reste intact.
+export async function stopRecurringSeries(id: number): Promise<void> {
+  await db.recurringSeries.update(id, { active: false });
+}
+
+function monthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Supprime la transaction déjà générée pour le mois en cours (s'il y en a
+// une) et pose skippedMonth pour empêcher generateDueTransactions() d'en
+// recréer une pour ce même mois. La série reste active les mois suivants.
+export async function skipRecurringSeriesThisMonth(
+  id: number,
+  now: Date,
+): Promise<void> {
+  const key = monthKey(now);
+  const idsThisMonth = await db.transactions
+    .toCollection()
+    .filter((t) => t.recurringSeriesId === id && monthKey(t.date) === key)
+    .primaryKeys();
+  await db.transactions.bulkDelete(idsThisMonth);
+  await db.recurringSeries.update(id, { skippedMonth: key });
+}
+
+// Renvoie le dernier jour valide du mois pour un `dayOfMonth` donné (ex: une
+// série créée le 31 janvier doit tomber le 28/29 février, pas planter ou
+// déborder sur mars). `new Date(year, month + 1, 0)` est l'astuce classique
+// pour obtenir le dernier jour de `month` : le "jour 0" du mois suivant.
+function clampDayOfMonth(year: number, month: number, day: number): number {
+  const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+  return Math.min(day, lastDayOfMonth);
+}
+
+// À appeler à l'ouverture de l'app (voir useEffect dans page.tsx). Pour
+// chaque série active dont la date de départ est passée, vérifie si une
+// transaction a déjà été générée ce mois-ci ; sinon en crée une.
+export async function generateDueTransactions(now: Date): Promise<void> {
+  const [allSeries, allTransactions] = await Promise.all([
+    db.recurringSeries.toArray(),
+    db.transactions.toArray(),
+  ]);
+
+  const dueSeries = allSeries.filter(
+    (s) => s.active && s.startDate <= now && s.skippedMonth !== monthKey(now),
+  );
+
+  for (const series of dueSeries) {
+    const alreadyGeneratedThisMonth = allTransactions.some(
+      (t) =>
+        t.recurringSeriesId === series.id &&
+        t.date.getFullYear() === now.getFullYear() &&
+        t.date.getMonth() === now.getMonth(),
+    );
+    if (alreadyGeneratedThisMonth) continue;
+
+    const day = clampDayOfMonth(
+      now.getFullYear(),
+      now.getMonth(),
+      series.dayOfMonth,
+    );
+    await db.transactions.add({
+      type: series.type,
+      amount: series.amount,
+      categoryId: series.categoryId,
+      note: series.note,
+      date: new Date(now.getFullYear(), now.getMonth(), day),
+      recurringSeriesId: series.id,
+    });
+  }
 }
 
 // ----------------------------------------------------------------------------

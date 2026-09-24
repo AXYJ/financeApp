@@ -72,7 +72,7 @@ export default function Header() {
         </svg>
       </Link>
       <Link
-        className={`${pathname === "/Reglages" ? "active" : ""} rounded-full p-2`}
+        className={`${pathname === "/Setting" ? "active" : ""} rounded-full p-2`}
         href="/Setting"
       >
         <svg

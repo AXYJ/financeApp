@@ -4,7 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent, JSX, MouseEvent as ReactMouseEvent } from "react";
 
 import type { Category, Transaction } from "../type/type";
-import { db, useCategories } from "../lib/db";
+import {
+  addRecurringSeries,
+  db,
+  generateDueTransactions,
+  useCategories,
+} from "../lib/db";
 import { useLiveQuery } from "dexie-react-hooks";
 
 import Header from "../composants/header/Header";
@@ -153,8 +158,12 @@ export default function Home() {
   const [currentSlide, setCurrentSlide] = useState<number>(1);
   const [addingTransaction, setAddingTransaction] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [expense, setExpense] = useState<string>("Courses");
-  const [income, setIncome] = useState<string>("Salaire");
+  const [expenseCategoryId, setExpenseCategoryId] = useState<number | null>(
+    null,
+  );
+  const [incomeCategoryId, setIncomeCategoryId] = useState<number | null>(
+    null,
+  );
   const popupRef = useRef<HTMLFormElement>(null);
 
   // Ajout de transaction — pas de champ `id` : Dexie le génère lui-même (++id du schéma)
@@ -180,25 +189,58 @@ export default function Home() {
     const categoryId: number = Number(formData.get("category"));
     const note: string = formData.get("name") as string;
     const date: Date = new Date();
+    // Une checkbox non cochée est absente du FormData — .get() renvoie alors `null`.
+    const isRecurring = formData.get("recurring") === "on";
 
     // Ajout de la transaction dans la base de données IndexedDB — si ça
     // échoue (quota dépassé, navigateur qui bloque...), on garde la pop-up
     // ouverte et on prévient plutôt que de la fermer sur une écriture ratée.
     try {
-      await addTransaction({
-        type,
-        amount,
-        categoryId,
-        note,
-        date,
-        recurringSeriesId: null,
-      });
+      if (isRecurring) {
+        // On crée la série (le "modèle" qui se répétera chaque mois) puis la
+        // toute première occurrence, reliée à cette série via recurringSeriesId.
+        const seriesId = await addRecurringSeries({
+          type,
+          amount,
+          categoryId,
+          note,
+          dayOfMonth: date.getDate(),
+          active: true,
+          startDate: date,
+          skippedMonth: null,
+        });
+        await addTransaction({
+          type,
+          amount,
+          categoryId,
+          note,
+          date,
+          recurringSeriesId: seriesId,
+        });
+      } else {
+        await addTransaction({
+          type,
+          amount,
+          categoryId,
+          note,
+          date,
+          recurringSeriesId: null,
+        });
+      }
       setSubmitError(null);
       setAddingTransaction(false);
     } catch {
       setSubmitError("Impossible d'enregistrer la transaction. Réessaie.");
     }
   }
+
+  // Génère les transactions dues pour les séries récurrentes actives — au
+  // montage de la page (donc à chaque ouverture de l'app), pas au chargement
+  // du module comme seedCategories : on veut que ça se redéclenche si tu
+  // reviens sur l'accueil après avoir navigué, pas juste une fois par onglet.
+  useEffect(() => {
+    generateDueTransactions(new Date());
+  }, []);
 
   // Fermer la pop-up en cliquant à l'extérieur
   useEffect(() => {
@@ -257,10 +299,21 @@ export default function Home() {
     now,
   );
 
+  // Catégorie par défaut = la première catégorie non vide ce mois-ci (sinon la
+  // première tout court) — utilisée tant que l'utilisateur n'a pas cliqué sur
+  // une tranche du camembert.
+  const defaultExpenseCategory =
+    expenseBreakdown.find((b) => b.amount > 0)?.category ??
+    expenseCategories[0];
+  const defaultIncomeCategory =
+    incomeBreakdown.find((b) => b.amount > 0)?.category ?? incomeCategories[0];
+
   const selectedExpenseCategory =
-    expenseCategories.find((c) => c.name === expense) ?? expenseCategories[0];
+    expenseCategories.find((c) => c.id === expenseCategoryId) ??
+    defaultExpenseCategory;
   const selectedIncomeCategory =
-    incomeCategories.find((c) => c.name === income) ?? incomeCategories[0];
+    incomeCategories.find((c) => c.id === incomeCategoryId) ??
+    defaultIncomeCategory;
   const selectedExpense =
     expenseBreakdown.find(
       (b) => b.category.id === selectedExpenseCategory.id,
@@ -294,7 +347,7 @@ export default function Home() {
             <PieChart
               breakdown={expenseBreakdown}
               center={selectedExpense}
-              onSelect={(category) => setExpense(category.name)}
+              onSelect={(category) => setExpenseCategoryId(category.id)}
             />
           </div>
           <TransactionList
@@ -309,7 +362,7 @@ export default function Home() {
             <PieChart
               breakdown={incomeBreakdown}
               center={selectedIncome}
-              onSelect={(category) => setIncome(category.name)}
+              onSelect={(category) => setIncomeCategoryId(category.id)}
             />
           </div>
           <TransactionList

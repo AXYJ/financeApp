@@ -30,6 +30,14 @@ function CategoryInputList({
   );
 }
 
+async function onAddCategory(
+  type: "expense" | "income",
+  name: string,
+): Promise<void> {
+  if (!name.trim()) return;
+  await db.categories.add({ name, color: "red", type });
+}
+
 export default function Categories() {
   // useLiveQuery (dans useCategories) lit la base et re-render automatiquement
   // à chaque update — rien à faire de plus pour que le champ reflète le nouveau nom.
@@ -57,17 +65,53 @@ export default function Categories() {
       )}
       <section className="flex w-full flex-col gap-4">
         <h2>Dépenses</h2>
-        <CategoryInputList
-          categories={expenseCategories}
-          onRename={renameCategory}
-        />
+        <div className="flex flex-col gap-2">
+          <CategoryInputList
+            categories={expenseCategories}
+            onRename={renameCategory}
+          />
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const name = new FormData(form).get("name") as string;
+              onAddCategory("expense", name);
+              form.reset();
+            }}
+          >
+            <input
+              type="text"
+              name="name"
+              className="w-full rounded-lg border border-white px-4 py-2"
+              placeholder="Ajouter une catégorie"
+            />
+          </form>
+        </div>
       </section>
       <section className="flex w-full flex-col gap-4">
         <h2>Revenus</h2>
-        <CategoryInputList
-          categories={incomeCategories}
-          onRename={renameCategory}
-        />
+        <div className="flex flex-col gap-2">
+          <CategoryInputList
+            categories={incomeCategories}
+            onRename={renameCategory}
+          />
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const name = new FormData(form).get("name") as string;
+              onAddCategory("income", name);
+              form.reset();
+            }}
+          >
+            <input
+              type="text"
+              name="name"
+              className="w-full rounded-lg border border-white px-4 py-2"
+              placeholder="Ajouter une catégorie"
+            />
+          </form>
+        </div>
       </section>
     </main>
   );

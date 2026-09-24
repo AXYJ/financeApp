@@ -70,17 +70,18 @@ export let IncomeCategory: Category[] = [
   },
 ];
 
-let RecursingId: number = 0;
-
-export type Recursing = {
-  id: string;
+export type RecurringSeries = {
+  id: number;
   type: "expense" | "income";
   amount: number;
-  categoryId: string;
-  note: string;
+  categoryId: number;
+  note: string | null;
   dayOfMonth: number;
   active: boolean;
   startDate: Date;
+  // "YYYY-MM" du mois à ne pas (re)générer, ou null. Posé par
+  // skipRecurringSeriesThisMonth() dans db.ts.
+  skippedMonth: string | null;
 };
 
 let transactionId: number = 0;
@@ -92,7 +93,7 @@ export type Transaction = {
   categoryId: number;
   note: string | null;
   date: Date;
-  recurringSeriesId: string | null;
+  recurringSeriesId: number | null;
 };
 
 export let Expense: Transaction[] = [];
