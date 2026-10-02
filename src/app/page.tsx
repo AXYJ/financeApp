@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent, JSX, MouseEvent as ReactMouseEvent } from "react";
+import type {
+  CSSProperties,
+  FormEvent,
+  JSX,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent,
+} from "react";
 
 import type { Category, Transaction } from "../type/type";
 import {
@@ -13,6 +20,25 @@ import {
 import { useLiveQuery } from "dexie-react-hooks";
 
 import Header from "../composants/header/Header";
+import HomeBackground from "../composants/home/HomeBackground";
+import P3RList from "../composants/home/P3RList";
+import { u } from "../composants/home/u";
+
+// Réglages des gestes (voir handlePointerMove / handlePointerUp)
+const LIST_STEP_PX = 36; // distance verticale parcourue pour avancer d'un cran
+const SWIPE_RATIO = 0.25; // part de la largeur à dépasser pour changer de slide
+const FLICK_SPEED = 0.5; // vitesse (px/ms) qui vaut changement de slide même court
+
+type ActiveGesture = {
+  startX: number;
+  startY: number;
+  axis: "x" | "y" | null;
+  listType: "expense" | "income" | null;
+  lastStepY: number;
+  lastX: number;
+  lastTime: number;
+  speed: number;
+};
 
 type CategoryBreakdown = {
   category: Category;
@@ -54,37 +80,6 @@ function getMonthTransactions(
     .sort((a, b) => b.date.getTime() - a.date.getTime());
 }
 
-function TransactionList({
-  transactions,
-  emptyMessage,
-  categoryName,
-}: {
-  transactions: Transaction[];
-  emptyMessage: string;
-  categoryName: string;
-}): JSX.Element {
-  if (transactions.length === 0) {
-    return <p className="text-center text-zinc-400">{emptyMessage}</p>;
-  }
-
-  return (
-    <div className="flex w-full flex-col gap-2">
-      {transactions.map((t) => (
-        <div key={t.id} className="grid grid-cols-4 items-center gap-2 px-4">
-          <div className="text-sm text-zinc-500">
-            {t.date.toLocaleDateString("fr-FR", {
-              day: "numeric",
-              month: "numeric",
-            })}
-          </div>
-          <div className="col-span-2 flex-1">{t.note || categoryName}</div>
-          <div>{t.amount.toFixed(2)} €</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function PieChart({
   breakdown,
   center,
@@ -98,7 +93,7 @@ function PieChart({
 
   if (segments.length === 0) {
     return (
-      <div className="mx-auto aspect-square w-full max-w-64 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+      <div className="mx-auto aspect-square w-8/10 max-w-48 rounded-full bg-zinc-200 dark:bg-zinc-800" />
     );
   }
 
@@ -161,10 +156,17 @@ export default function Home() {
   const [expenseCategoryId, setExpenseCategoryId] = useState<number | null>(
     null,
   );
-  const [incomeCategoryId, setIncomeCategoryId] = useState<number | null>(
-    null,
-  );
+  const [incomeCategoryId, setIncomeCategoryId] = useState<number | null>(null);
   const popupRef = useRef<HTMLFormElement>(null);
+
+  // Curseur de chaque liste (index de la transaction active, celle du haut)
+  const [cursors, setCursors] = useState({ expense: 0, income: 0 });
+  // Décalage horizontal (px) du slide pendant que le doigt le tire
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const gestureRef = useRef<ActiveGesture | null>(null);
+  const movedRef = useRef(false);
+  const wheelLockRef = useRef(false);
 
   // Ajout de transaction — pas de champ `id` : Dexie le génère lui-même (++id du schéma)
   async function addTransaction(
@@ -259,12 +261,6 @@ export default function Home() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [addingTransaction]);
 
-  // Changement de slide + retour en haut de page
-  function goToSlide(slide: number): void {
-    setCurrentSlide(slide);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
   // useLiveQuery relit automatiquement la base et re-render dès qu'une transaction
   // ou une catégorie est ajoutée/modifiée/supprimée — plus besoin de forcer un
   // re-render à la main. Reste `undefined` le temps de la première lecture
@@ -329,74 +325,268 @@ export default function Home() {
     (t) => t.categoryId === selectedIncomeCategory.id,
   );
 
+  const activeType = currentSlide === 1 ? "expense" : "income";
+  const listLengths = {
+    expense: expenseTransactions.length,
+    income: incomeTransactions.length,
+  };
+  // Le curseur ne dépasse jamais la dernière transaction (la dernière peut être
+  // active toute seule en haut) — utile si la liste raccourcit après coup.
+  const cursorOf = (type: "expense" | "income") =>
+    Math.min(cursors[type], Math.max(listLengths[type] - 1, 0));
+
+  // Un cran de liste : +1 = transaction suivante, -1 = précédente. Arrêt aux
+  // extrémités, pas de boucle.
+  function stepList(delta: number): void {
+    setCursors((current) => ({
+      ...current,
+      [activeType]: Math.min(
+        Math.max(cursorOf(activeType) + delta, 0),
+        Math.max(listLengths[activeType] - 1, 0),
+      ),
+    }));
+  }
+
+  // Changer de slide ou de catégorie ramène la liste sur la première transaction.
+  function changeSlide(slide: number): void {
+    setCurrentSlide(slide);
+    setCursors({ expense: 0, income: 0 });
+  }
+
+  function selectCategory(type: "expense" | "income", category: Category) {
+    if (type === "expense") setExpenseCategoryId(category.id);
+    else setIncomeCategoryId(category.id);
+    setCursors((current) => ({ ...current, [type]: 0 }));
+  }
+
+  // Un seul contrôleur de gestes pour les deux axes : l'axe dominant du
+  // mouvement décide si on tire le slide (x) ou si on fait défiler la liste (y).
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const list = (event.target as HTMLElement).closest<HTMLElement>(
+      "[data-p3r-list]",
+    );
+    gestureRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      axis: null,
+      listType: (list?.dataset.p3rList as "expense" | "income") ?? null,
+      lastStepY: event.clientY,
+      lastX: event.clientX,
+      lastTime: event.timeStamp,
+      speed: 0,
+    };
+    movedRef.current = false;
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
+    const gesture = gestureRef.current;
+    if (!gesture) return;
+    const dx = event.clientX - gesture.startX;
+    const dy = event.clientY - gesture.startY;
+
+    if (!gesture.axis) {
+      if (Math.hypot(dx, dy) < 8) return;
+      gesture.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      event.currentTarget.setPointerCapture(event.pointerId);
+      movedRef.current = true;
+      if (gesture.axis === "x") setDragging(true);
+    }
+
+    if (gesture.axis === "x") {
+      const elapsed = event.timeStamp - gesture.lastTime;
+      if (elapsed > 0)
+        gesture.speed = (event.clientX - gesture.lastX) / elapsed;
+      gesture.lastX = event.clientX;
+      gesture.lastTime = event.timeStamp;
+      // Résistance quand on tire au-delà du premier / dernier slide
+      const pastEdge =
+        (currentSlide === 1 && dx > 0) || (currentSlide === 2 && dx < 0);
+      setDragX(pastEdge ? dx * 0.3 : dx);
+    } else if (gesture.listType === activeType) {
+      while (gesture.lastStepY - event.clientY >= LIST_STEP_PX) {
+        stepList(1);
+        gesture.lastStepY -= LIST_STEP_PX;
+      }
+      while (event.clientY - gesture.lastStepY >= LIST_STEP_PX) {
+        stepList(-1);
+        gesture.lastStepY += LIST_STEP_PX;
+      }
+    }
+  }
+
+  function handlePointerEnd(
+    event: ReactPointerEvent<HTMLDivElement>,
+    cancelled: boolean,
+  ): void {
+    const gesture = gestureRef.current;
+    gestureRef.current = null;
+    if (!gesture || gesture.axis !== "x") return;
+
+    const dx = event.clientX - gesture.startX;
+    const far = Math.abs(dx) > event.currentTarget.clientWidth * SWIPE_RATIO;
+    const flick =
+      Math.abs(gesture.speed) > FLICK_SPEED &&
+      Math.sign(gesture.speed) === Math.sign(dx);
+    if (!cancelled && (far || flick)) {
+      if (dx < 0 && currentSlide === 1) changeSlide(2);
+      else if (dx > 0 && currentSlide === 2) changeSlide(1);
+    }
+    setDragX(0);
+    setDragging(false);
+  }
+
+  // Molette / trackpad : un cran par impulsion (verrou court pour éviter que
+  // l'inertie de la molette n'enchaîne des dizaines de crans).
+  function handleWheel(event: ReactWheelEvent<HTMLDivElement>): void {
+    if (wheelLockRef.current || Math.abs(event.deltaY) < 4) return;
+    stepList(event.deltaY > 0 ? 1 : -1);
+    wheelLockRef.current = true;
+    setTimeout(() => {
+      wheelLockRef.current = false;
+    }, 180);
+  }
+
+  // `--u` = 1px de la maquette (393px de large), pour tout mettre à l'échelle
+  // en unités relatives ; la scène garde le ratio de la maquette (jamais de
+  // contenu rogné) et se centre sur les écrans qui ne matchent pas ce ratio —
+  // en hauteur, elle occupe toujours 100dvh (voir `inset-y-0` sur le conteneur).
+  const stageStyle = {
+    "--stage-width": "min(100vw, calc(100dvh * 393 / 852))",
+    "--u": "calc(var(--stage-width) / 393)",
+    width: "var(--stage-width)",
+  } as CSSProperties;
+
+  // Le décor (photo + bande diagonale) vit dans son propre calque, mis à
+  // l'échelle avec `max()` pour couvrir tout le viewport (100vw ET 100dvh) —
+  // ça évite les bandes `bg-dark-blue` sur les écrans qui ne matchent pas le
+  // ratio de la maquette. Contrairement à la scène interactive (`stageStyle`,
+  // en `min()`), on accepte ici de rogner le décor : c'est un fond, pas du
+  // contenu fonctionnel.
+  const backdropStyle = {
+    "--u": "max(calc(100vw / 393), calc(100dvh / 852))",
+  } as CSSProperties;
+
+  const slideTitle = "absolute font-rodin-ub whitespace-nowrap text-[#fefcfd]";
+
   return (
-    <main className="mb-28 flex w-full max-w-3xl flex-1 flex-col items-center gap-8 overflow-x-hidden bg-white px-4 py-12 sm:items-start dark:bg-black">
-      {/* Menu bottom */}
-      <Header />
-
-      {/* Contenu principal */}
+    <main className="bg-dark-blue fixed inset-0 overflow-clip">
+      <div className="absolute inset-0 overflow-clip" style={backdropStyle}>
+        <HomeBackground
+          monthName={monthName.toUpperCase()}
+          monthNumber={String(now.getMonth() + 1).padStart(2, "0")}
+        />
+      </div>
       <div
-        className="flex w-full transition-transform duration-500 ease-in-out"
-        style={{
-          transform: `translateX(-${(currentSlide - 1) * 100}%)`,
-        }}
+        className="absolute inset-y-0 right-0 left-0 mx-auto"
+        style={stageStyle}
       >
-        <section className="relative flex w-full shrink-0 flex-col items-center gap-4">
-          <h1 className="text-center">Dépenses de {monthName}</h1>
-          <div className="w-full">
-            <PieChart
-              breakdown={expenseBreakdown}
-              center={selectedExpense}
-              onSelect={(category) => setExpenseCategoryId(category.id)}
-            />
+        {/* Slides : suivent le doigt (axe x), la liste défile sur l'axe y */}
+        <div
+          className="absolute inset-0 touch-none select-none"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={(event) => handlePointerEnd(event, false)}
+          onPointerCancel={(event) => handlePointerEnd(event, true)}
+          onClickCapture={(event) => {
+            // Après un glissement, on ne veut pas d'un clic parasite sur le donut
+            if (movedRef.current) {
+              event.stopPropagation();
+              movedRef.current = false;
+            }
+          }}
+        >
+          <div
+            className="flex h-screen w-[200%]"
+            style={{
+              transform: `translateX(calc(${-(currentSlide - 1) * 50}% + ${dragX}px))`,
+              transition: dragging
+                ? "none"
+                : "transform 450ms cubic-bezier(0.22, 1, 0.36, 1)",
+            }}
+          >
+            <section className="relative h-screen w-1/2 shrink-0">
+              <h1
+                className={slideTitle}
+                style={{ left: "6.11%", top: "2.35%", fontSize: u(40) }}
+              >
+                DÉPENSES
+              </h1>
+              <div className="absolute w-full" style={{ top: "10.56%" }}>
+                <PieChart
+                  breakdown={expenseBreakdown}
+                  center={selectedExpense}
+                  onSelect={(category) => selectCategory("expense", category)}
+                />
+              </div>
+              <P3RList
+                type="expense"
+                transactions={expenseTransactions}
+                cursor={cursorOf("expense")}
+                categoryName={selectedExpenseCategory.name}
+                emptyMessage="Aucune dépense ce mois-ci"
+                onWheel={handleWheel}
+              />
+            </section>
+            <section className="relative h-screen w-1/2 shrink-0">
+              <h1
+                className={slideTitle}
+                style={{ left: "6.11%", top: "2.35%", fontSize: u(40) }}
+              >
+                REVENUS
+              </h1>
+              <div className="absolute w-full" style={{ top: "10.56%" }}>
+                <PieChart
+                  breakdown={incomeBreakdown}
+                  center={selectedIncome}
+                  onSelect={(category) => selectCategory("income", category)}
+                />
+              </div>
+              <P3RList
+                type="income"
+                transactions={incomeTransactions}
+                cursor={cursorOf("income")}
+                categoryName={selectedIncomeCategory.name}
+                emptyMessage="Aucun revenu ce mois-ci"
+                onWheel={handleWheel}
+              />
+            </section>
           </div>
-          <TransactionList
-            transactions={expenseTransactions}
-            emptyMessage="Aucune dépense ce mois-ci"
-            categoryName={selectedExpenseCategory.name}
-          />
-        </section>
-        <section className="relative flex w-full shrink-0 flex-col items-center gap-4">
-          <h1 className="text-center">Revenus de {monthName}</h1>
-          <div className="w-full">
-            <PieChart
-              breakdown={incomeBreakdown}
-              center={selectedIncome}
-              onSelect={(category) => setIncomeCategoryId(category.id)}
-            />
-          </div>
-          <TransactionList
-            transactions={incomeTransactions}
-            emptyMessage="Aucun revenu ce mois-ci"
-            categoryName={selectedIncomeCategory.name}
-          />
-        </section>
-      </div>
+        </div>
 
-      {/* Boutons de changement de carousel */}
-      <div className="flex gap-2">
+        {/* Bouton d'ajout : fixe, dans le prolongement de la liste */}
         <button
-          className={`h-4 w-4 rounded-full ${currentSlide === 1 ? "bg-amber-500" : "bg-white"}`}
-          onClick={() => goToSlide(1)}
-        ></button>
-        <button
-          className={`h-4 w-4 rounded-full ${currentSlide === 2 ? "bg-amber-500" : "bg-white"}`}
-          onClick={() => goToSlide(2)}
-        ></button>
-      </div>
-
-      {/* Bouton d'ajout de transaction */}
-      <div className="fixed bottom-3/20 w-8/10">
-        <button
-          className="w-full rounded-full bg-white py-2 text-black"
+          className="absolute"
+          style={{
+            left: "16.79%",
+            top: "77.7%",
+            width: u(323),
+            height: u(44),
+          }}
           onClick={() => {
             setSubmitError(null);
             setAddingTransaction(true);
           }}
         >
-          Ajouter {currentSlide === 1 ? "une dépense" : "un revenu"}
+          <span
+            className="absolute -scale-x-100"
+            style={{
+              inset: "-2.27% -0.38%",
+              backgroundImage: "url(/home/button.svg)",
+              backgroundSize: "100% 100%",
+            }}
+          />
+          <span
+            className="font-rodin-m relative text-white"
+            style={{ fontSize: u(24), letterSpacing: u(-2.4) }}
+          >
+            Ajouter {currentSlide === 1 ? "une dépense" : "un revenu"}
+          </span>
         </button>
       </div>
+
+      {/* Menu bottom */}
+      <Header />
 
       {/* Pop-up d'ajout de transaction */}
       {addingTransaction && (

@@ -31,7 +31,11 @@ Personal finance tracker (Next.js App Router + TypeScript + Tailwind v4). Built 
 
 App Router, folder-per-route:
 
-- `/` (`page.tsx`) — home: current month as a 2-slide carousel (expense/income). Each slide has a `PieChart` (pure CSS `conic-gradient`, no charting library — clicking a slice computes the click angle relative to the circle's center to pick a category, see `handleClick`) and a `TransactionList` filtered to whichever category is currently selected.
+- `/` (`page.tsx`) — home, styled after a Figma mockup (Persona 3 Reload look). Current month as a 2-slide carousel (expense/income): each slide has a `PieChart` (pure CSS `conic-gradient`, no charting library — clicking a slice computes the click angle relative to the circle's center to pick a category, see `handleClick`) and a `P3RList` (`src/composants/home/`) showing the selected category's transactions, 3 rows at a time.
+  - Layout is a fixed, non-scrolling "stage" sized in `u()` units (`--u` = stage width / 393, the Figma frame width) with vertical positions in `%`; use `u(n)` from `src/composants/home/u.ts` instead of px so it scales on any phone.
+  - A single pointer-gesture controller on the slides area (`handlePointerDown/Move/End` in `page.tsx`) picks the axis: horizontal drag swipes between slides (follows the finger, snaps at 25% or on flick), vertical drag/wheel on the list moves the P3R cursor one row per step (the top row is the "active" white one). Lists don't wrap; changing slide or category resets the cursor.
+  - Fonts (FOT-Rodin / FOT-NewRodin, commercial) are `@font-face`d in `globals.css` from `src/fonts/`; Figma palette tokens (`dark-blue`, `turquoise`, `p3r-gray`, `p3r-red`) live in its `@theme`. Background/row/button images are Figma exports in `public/home/`.
+  - Only the home page layout has this theme so far; `PieChart`, `Header` and the other pages are still the original style.
 - `/Categories` — rename categories inline; writes straight to `db.categories.update(...)`.
 - `/History`, `/Setting` — route folders exist but are still empty stubs.
 

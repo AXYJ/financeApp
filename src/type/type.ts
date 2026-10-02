@@ -2,6 +2,9 @@ export type Category = {
   id: number;
   name: string;
   color: string;
+  // Même couleur que `color` mais assombrie, pour le texte du nom de
+  // catégorie (contraste sur le fond clair de `color`).
+  textColor: string;
   type: "expense" | "income";
 };
 
@@ -14,37 +17,43 @@ export let ExpenseCategory: Category[] = [
   {
     id: categoryId++,
     name: "Courses",
-    color: "green",
+    color: "var(--color-cat-green)",
+    textColor: "var(--color-cat-green-dark)",
     type: "expense",
   },
   {
     id: categoryId++,
     name: "Charges",
-    color: "yellow",
+    color: "var(--color-cat-yellow)",
+    textColor: "var(--color-cat-yellow-dark)",
     type: "expense",
   },
   {
     id: categoryId++,
     name: "Loisirs",
-    color: "red",
+    color: "var(--color-cat-red)",
+    textColor: "var(--color-cat-red-dark)",
     type: "expense",
   },
   {
     id: categoryId++,
     name: "Transport",
-    color: "blue",
+    color: "var(--color-cat-blue)",
+    textColor: "var(--color-cat-blue-dark)",
     type: "expense",
   },
   {
     id: categoryId++,
     name: "Restaurant",
-    color: "purple",
+    color: "var(--color-cat-purple)",
+    textColor: "var(--color-cat-purple-dark)",
     type: "expense",
   },
   {
     id: categoryId++,
     name: "Autre",
-    color: "grey",
+    color: "var(--color-cat-orange)",
+    textColor: "var(--color-cat-orange-dark)",
     type: "expense",
   },
 ];
@@ -53,19 +62,22 @@ export let IncomeCategory: Category[] = [
   {
     id: categoryId++,
     name: "Salaire",
-    color: "yellow",
+    color: "var(--color-cat-yellow)",
+    textColor: "var(--color-cat-yellow-dark)",
     type: "income",
   },
   {
     id: categoryId++,
     name: "Dons",
-    color: "blue",
+    color: "var(--color-cat-blue)",
+    textColor: "var(--color-cat-blue-dark)",
     type: "income",
   },
   {
     id: categoryId++,
     name: "Remboursement",
-    color: "green",
+    color: "var(--color-cat-green)",
+    textColor: "var(--color-cat-green-dark)",
     type: "income",
   },
 ];

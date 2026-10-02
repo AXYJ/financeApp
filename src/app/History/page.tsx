@@ -41,15 +41,15 @@ function BarChart({ months }: { months: MonthTotal[] }) {
         >
           <div className="flex h-32 items-end gap-1">
             <div
-              className="w-3 rounded-t bg-red-400"
+              className="bg-p3r-red w-3 rounded-t"
               style={{ height: `${(m.expenseTotal / max) * 100}%` }}
             />
             <div
-              className="w-3 rounded-t bg-green-400"
+              className="bg-turquoise w-3 rounded-t"
               style={{ height: `${(m.incomeTotal / max) * 100}%` }}
             />
           </div>
-          <span className="text-xs text-zinc-500 capitalize">{m.label}</span>
+          <span className="text-p3r-gray text-xs capitalize">{m.label}</span>
         </div>
       ))}
     </div>
@@ -80,19 +80,19 @@ export default function History() {
   });
 
   return (
-    <main className="mb-16 flex w-full max-w-3xl flex-1 flex-col items-center gap-8 bg-white px-4 py-12 sm:items-start dark:bg-black">
+    <main className="bg-dark-blue mb-16 flex w-full max-w-3xl flex-1 flex-col items-center gap-8 px-4 py-12 sm:items-start">
       <Header />
       <h1>Historique</h1>
 
       <section className="flex w-full flex-col gap-4">
         <h2>Comparatif des 6 derniers mois</h2>
-        <div className="flex gap-4 text-sm text-zinc-500">
+        <div className="text-p3r-gray flex gap-4 text-sm">
           <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-full bg-red-400" />{" "}
+            <span className="bg-p3r-red inline-block h-2 w-2 rounded-full" />{" "}
             Dépenses
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-full bg-green-400" />{" "}
+            <span className="bg-turquoise inline-block h-2 w-2 rounded-full" />{" "}
             Revenus
           </span>
         </div>
@@ -104,7 +104,7 @@ export default function History() {
         {[...months].reverse().map((m) => (
           <div
             key={`${m.year}-${m.month}`}
-            className="flex items-center justify-between rounded-lg border border-zinc-200 px-4 py-2 dark:border-zinc-800"
+            className="border-turquoise/40 flex flex-col items-center justify-between gap-2 rounded-lg border px-4 py-2"
           >
             <span className="capitalize">
               {new Date(m.year, m.month, 1).toLocaleDateString("fr-FR", {
@@ -113,10 +113,10 @@ export default function History() {
               })}
             </span>
             <div className="flex gap-4 text-sm">
-              <span className="text-red-500">
+              <span className="text-p3r-red">
                 -{m.expenseTotal.toFixed(2)} €
               </span>
-              <span className="text-green-500">
+              <span className="text-turquoise">
                 +{m.incomeTotal.toFixed(2)} €
               </span>
             </div>

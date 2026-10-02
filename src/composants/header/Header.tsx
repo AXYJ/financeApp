@@ -9,7 +9,7 @@ export default function Header() {
   const pathname = usePathname();
 
   return (
-    <header className="fixed bottom-0 flex w-full justify-between bg-white px-8 py-4">
+    <header className="bg-dark-blue fixed bottom-0 flex w-full justify-between px-8 py-4">
       <Link
         className={`${pathname === "/" ? "active" : ""} rounded-full p-2`}
         href="/"
@@ -20,7 +20,7 @@ export default function Header() {
           height="24"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="black"
+          stroke="white"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -40,7 +40,7 @@ export default function Header() {
           height="24"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="black"
+          stroke="white"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -61,7 +61,7 @@ export default function Header() {
           height="24"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="black"
+          stroke="white"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -81,7 +81,7 @@ export default function Header() {
           height="24"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="black"
+          stroke="white"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"

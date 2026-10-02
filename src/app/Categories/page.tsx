@@ -22,8 +22,11 @@ function CategoryInputList({
           key={category.id}
           value={category.name}
           onChange={(e) => onRename(category.id, e.target.value)}
-          style={{ backgroundColor: category.color }}
-          className="w-full rounded-lg px-4 py-2"
+          style={{
+            backgroundColor: category.color,
+            color: category.textColor,
+          }}
+          className="w-full rounded-lg px-4 py-2 font-semibold"
         />
       ))}
     </div>
@@ -35,7 +38,12 @@ async function onAddCategory(
   name: string,
 ): Promise<void> {
   if (!name.trim()) return;
-  await db.categories.add({ name, color: "red", type });
+  await db.categories.add({
+    name,
+    color: "var(--color-cat-red)",
+    textColor: "var(--color-cat-red-dark)",
+    type,
+  });
 }
 
 export default function Categories() {
@@ -57,11 +65,11 @@ export default function Categories() {
   }
 
   return (
-    <main className="mb-16 flex w-full max-w-3xl flex-1 flex-col items-center gap-8 bg-white px-4 py-12 sm:items-start dark:bg-black">
+    <main className="bg-dark-blue mb-16 flex w-full max-w-3xl flex-1 flex-col items-center gap-8 px-4 py-12 sm:items-start">
       <Header />
       <h1>Liste des catégories</h1>
       {renameError && (
-        <p className="w-full text-center text-sm text-red-500">{renameError}</p>
+        <p className="text-p3r-red w-full text-center text-sm">{renameError}</p>
       )}
       <section className="flex w-full flex-col gap-4">
         <h2>Dépenses</h2>
@@ -82,7 +90,7 @@ export default function Categories() {
             <input
               type="text"
               name="name"
-              className="w-full rounded-lg border border-white px-4 py-2"
+              className="border-turquoise placeholder-p3r-gray w-full rounded-lg border px-4 py-2 text-white"
               placeholder="Ajouter une catégorie"
             />
           </form>
@@ -107,7 +115,7 @@ export default function Categories() {
             <input
               type="text"
               name="name"
-              className="w-full rounded-lg border border-white px-4 py-2"
+              className="border-turquoise placeholder-p3r-gray w-full rounded-lg border px-4 py-2 text-white"
               placeholder="Ajouter une catégorie"
             />
           </form>
