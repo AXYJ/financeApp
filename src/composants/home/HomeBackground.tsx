@@ -15,7 +15,7 @@ export default function HomeBackground({
 
   return (
     <>
-      <div
+      {/* <div
         className="absolute"
         style={{
           left: "-26.81%",
@@ -26,7 +26,7 @@ export default function HomeBackground({
           backgroundImage: "url(/home/bg-photo.png)",
           backgroundSize: "100% 100%",
         }}
-      />
+      /> */}
       <div
         className="absolute bg-white"
         style={{

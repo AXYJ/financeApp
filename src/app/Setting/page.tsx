@@ -6,6 +6,7 @@ import {
   db,
   skipRecurringSeriesThisMonth,
   stopRecurringSeries,
+  useCategories,
 } from "@/lib/db";
 import Header from "@/composants/header/Header";
 
@@ -74,6 +75,12 @@ export default function Setting() {
   const recurringSeries =
     useLiveQuery(() => db.recurringSeries.toArray()) ?? [];
   const activeSeries = recurringSeries.filter((s) => s.active);
+  const categoriesById = new Map(
+    [...useCategories("expense"), ...useCategories("income")].map((c) => [
+      c.id,
+      c,
+    ]),
+  );
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -154,14 +161,20 @@ export default function Setting() {
             Aucune transaction récurrente.
           </p>
         )}
-        {activeSeries.map((series) => (
+        {activeSeries.map((series) => {
+          const category = categoriesById.get(series.categoryId);
+          return (
           <div key={series.id} className="flex w-full gap-2">
             <input
               type="text"
               value={series.note ?? ""}
               onChange={(e) => renameSeries(series.id, e.target.value)}
               placeholder="Nom de la transaction"
-              className="border-turquoise placeholder-p3r-gray w-full rounded-lg border px-4 py-2 text-white"
+              className="placeholder-p3r-gray w-full rounded-lg border px-4 py-2 font-semibold"
+              style={{
+                backgroundColor: category?.color,
+                color: category?.textColor,
+              }}
             />
             <button
               type="button"
@@ -171,7 +184,8 @@ export default function Setting() {
               Gérer
             </button>
           </div>
-        ))}
+          );
+        })}
       </section>
 
       <dialog

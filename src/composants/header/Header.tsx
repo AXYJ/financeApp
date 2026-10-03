@@ -9,7 +9,7 @@ export default function Header() {
   const pathname = usePathname();
 
   return (
-    <header className="bg-dark-blue fixed bottom-0 flex w-full justify-between px-8 py-4">
+    <header className="bg-dark-blue fixed bottom-0 flex w-full justify-between px-8 py-4 z-9999">
       <Link
         className={`${pathname === "/" ? "active" : ""} rounded-full p-2`}
         href="/"

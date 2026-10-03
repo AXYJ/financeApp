@@ -83,7 +83,7 @@ function Row({
       >
         <span
           className="font-newrodin-db min-w-0 truncate"
-          style={{ fontSize: u(32), letterSpacing: u(-3.2) }}
+          style={{ fontSize: u(32), letterSpacing: u(-1.5) }}
         >
           {transaction.note || categoryName}
         </span>

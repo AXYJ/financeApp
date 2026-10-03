@@ -17,33 +17,96 @@ function CategoryInputList({
   return (
     <div className="flex flex-col gap-2">
       {categories.map((category) => (
-        <input
-          type="text"
-          key={category.id}
-          value={category.name}
-          onChange={(e) => onRename(category.id, e.target.value)}
-          style={{
-            backgroundColor: category.color,
-            color: category.textColor,
-          }}
-          className="w-full rounded-lg px-4 py-2 font-semibold"
-        />
+        <div key={category.id} className="relative">
+          <input
+            type="text"
+            value={category.name}
+            onChange={(e) => onRename(category.id, e.target.value)}
+            style={{
+              backgroundColor: category.color,
+              color: category.textColor,
+            }}
+            className="w-full rounded-lg px-4 py-2 pr-10 font-semibold"
+          />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={category.textColor}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2"
+          >
+            <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" />
+          </svg>
+        </div>
       ))}
     </div>
   );
 }
 
+// Palette des catégories (voir type.ts/seedCategories) — on tourne dedans pour
+// qu'une catégorie ajoutée à la main n'arrive pas toujours en rouge.
+const CATEGORY_PALETTE: { color: string; textColor: string }[] = [
+  { color: "var(--color-cat-green)", textColor: "var(--color-cat-green-dark)" },
+  { color: "var(--color-cat-yellow)", textColor: "var(--color-cat-yellow-dark)" },
+  { color: "var(--color-cat-red)", textColor: "var(--color-cat-red-dark)" },
+  { color: "var(--color-cat-blue)", textColor: "var(--color-cat-blue-dark)" },
+  { color: "var(--color-cat-purple)", textColor: "var(--color-cat-purple-dark)" },
+  { color: "var(--color-cat-orange)", textColor: "var(--color-cat-orange-dark)" },
+  { color: "var(--color-cat-ice)", textColor: "var(--color-cat-ice-dark)" },
+];
+
 async function onAddCategory(
   type: "expense" | "income",
   name: string,
+  existingCount: number,
 ): Promise<void> {
   if (!name.trim()) return;
-  await db.categories.add({
-    name,
-    color: "var(--color-cat-red)",
-    textColor: "var(--color-cat-red-dark)",
-    type,
-  });
+  const { color, textColor } =
+    CATEGORY_PALETTE[existingCount % CATEGORY_PALETTE.length];
+  await db.categories.add({ name, color, textColor, type });
+}
+
+function CategorySection({
+  title,
+  type,
+  categories,
+  onRename,
+}: {
+  title: string;
+  type: "expense" | "income";
+  categories: Category[];
+  onRename: (id: number, name: string) => void;
+}) {
+  return (
+    <section className="flex w-full flex-col gap-4">
+      <h2>{title}</h2>
+      <div className="flex flex-col gap-2">
+        <CategoryInputList categories={categories} onRename={onRename} />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const form = e.currentTarget;
+            const name = new FormData(form).get("name") as string;
+            onAddCategory(type, name, categories.length);
+            form.reset();
+          }}
+        >
+          <input
+            type="text"
+            name="name"
+            className="border-turquoise placeholder-p3r-gray w-full rounded-lg border px-4 py-2 text-white"
+            placeholder="Ajouter une catégorie"
+          />
+        </form>
+      </div>
+    </section>
+  );
 }
 
 export default function Categories() {
@@ -71,56 +134,18 @@ export default function Categories() {
       {renameError && (
         <p className="text-p3r-red w-full text-center text-sm">{renameError}</p>
       )}
-      <section className="flex w-full flex-col gap-4">
-        <h2>Dépenses</h2>
-        <div className="flex flex-col gap-2">
-          <CategoryInputList
-            categories={expenseCategories}
-            onRename={renameCategory}
-          />
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const form = e.currentTarget;
-              const name = new FormData(form).get("name") as string;
-              onAddCategory("expense", name);
-              form.reset();
-            }}
-          >
-            <input
-              type="text"
-              name="name"
-              className="border-turquoise placeholder-p3r-gray w-full rounded-lg border px-4 py-2 text-white"
-              placeholder="Ajouter une catégorie"
-            />
-          </form>
-        </div>
-      </section>
-      <section className="flex w-full flex-col gap-4">
-        <h2>Revenus</h2>
-        <div className="flex flex-col gap-2">
-          <CategoryInputList
-            categories={incomeCategories}
-            onRename={renameCategory}
-          />
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const form = e.currentTarget;
-              const name = new FormData(form).get("name") as string;
-              onAddCategory("income", name);
-              form.reset();
-            }}
-          >
-            <input
-              type="text"
-              name="name"
-              className="border-turquoise placeholder-p3r-gray w-full rounded-lg border px-4 py-2 text-white"
-              placeholder="Ajouter une catégorie"
-            />
-          </form>
-        </div>
-      </section>
+      <CategorySection
+        title="Dépenses"
+        type="expense"
+        categories={expenseCategories}
+        onRename={renameCategory}
+      />
+      <CategorySection
+        title="Revenus"
+        type="income"
+        categories={incomeCategories}
+        onRename={renameCategory}
+      />
     </main>
   );
 }

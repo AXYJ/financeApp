@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Finances
 
-## Getting Started
+Tracker de finances personnelles, PWA solo/mobile. Next.js (App Router) + TypeScript + Tailwind v4. Pas de backend, pas d'auth : toutes les données vivent dans IndexedDB via Dexie.
 
-First, run the development server:
+## Démarrer
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ouvrir [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Autres commandes :
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `npm run build` — build de production
+- `npm run start` — lance le build de production
+- `npm run lint` — ESLint
+- `npm run format` — Prettier (tri des classes Tailwind inclus)
 
-## Learn More
+Pas de suite de tests pour l'instant.
 
-To learn more about Next.js, take a look at the following resources:
+## Architecture
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `src/type/type.ts` — types du domaine (`Category`, `Transaction`) et données par défaut servant uniquement à seeder IndexedDB au premier lancement.
+- `src/lib/db.ts` — wrapper Dexie (`FinanceDB`), tables `categories` et `transactions`, hook `useCategories`, et les helpers de transactions récurrentes (`addRecurringSeries`, `generateDueTransactions`, etc.).
+- `src/app/` — pages (App Router) : `/` (accueil, carousel dépenses/revenus), `/Categories`, `/History`, `/Setting`.
+- `src/composants/` — composants partagés (`Header`, composants de la page d'accueil).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Voir [CLAUDE.md](CLAUDE.md) pour le détail des conventions.

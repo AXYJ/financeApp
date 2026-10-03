@@ -96,8 +96,6 @@ export type RecurringSeries = {
   skippedMonth: string | null;
 };
 
-let transactionId: number = 0;
-
 export type Transaction = {
   id: number;
   type: "expense" | "income";
@@ -107,6 +105,3 @@ export type Transaction = {
   date: Date;
   recurringSeriesId: number | null;
 };
-
-export let Expense: Transaction[] = [];
-export let Income: Transaction[] = [];

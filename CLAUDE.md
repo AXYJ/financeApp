@@ -46,4 +46,4 @@ App Router, folder-per-route:
 - Everything is client-side: `'use client'` on every page/component that touches state or Dexie.
 - No app-level state manager (Redux/Zustand/Context) — the add/rename flows write directly to Dexie and rely on `useLiveQuery` to propagate the change to every screen reading that data.
 - `Category.color` is a plain CSS color keyword string (`"green"`, `"blue"`, ...) used directly in inline `style`; there's no color picker or validation.
-- The recurring-transaction feature (`Recursing` type in `type.ts`, the "Répéter tous les mois" checkbox on the add-transaction form) is scaffolded but not implemented — the checkbox currently has no effect.
+- Recurring transactions are implemented via `RecurringSeries` (`type.ts`) and the `addRecurringSeries`/`generateDueTransactions`/`skipRecurringSeriesThisMonth`/`stopRecurringSeries` helpers in `db.ts`. Checking "Répéter tous les mois" on the add-transaction form creates a series plus its first occurrence; `generateDueTransactions` runs on mount of `/` to backfill any months a series is due for. Managing/stopping a series happens from `/Setting`.
